@@ -12,7 +12,7 @@ const mapAirlineRowToUi = (a) => ({
   code: a.code,
   name: a.name,
   color: a.color || "#64748B",
-  logo: a.logo_url || "",
+  logo: a.logo_url || `https://via.placeholder.com/80x80.png?text=${a.code}`,
 });
 
 const mapFlightRowToUi = (f) => ({
@@ -936,15 +936,22 @@ function ResultsPage({ searchParams, onBack, onSelect }) {
               const stopsLabel = flight.stops === 0 ? "Nonstop" : flight.stops === 1 ? "1 stop" : `${flight.stops} stops`;
               const stopsColor = flight.stops === 0 ? "#0D9488" : flight.stops === 1 ? "#D97706" : "#DC2626";
               return (
-                <div key={flight.id} style={{ background: "#fff", borderRadius: 18, border: "1px solid #E2E8F0", overflow: "hidden", transition: "all 0.25s", animation: `fadeUp 0.3s ${i * 0.03}s both` }}
+                <div key={flight.id} style={{ background: "#fff", borderRadius: 22, border: "1px solid #E2E8F0", overflow: "hidden", transition: "all 0.25s", animation: `fadeUp 0.3s ${i * 0.03}s both`, boxShadow: "0 6px 18px rgba(15,23,42,0.04)" }}
                   onMouseEnter={e => { e.currentTarget.style.boxShadow = "0 8px 30px rgba(0,0,0,0.07)"; e.currentTarget.style.transform = "translateY(-2px)"; }}
                   onMouseLeave={e => { e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.transform = "translateY(0)"; }}>
                   <div style={{ padding: "18px 24px", display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 150 }}>
-                      <AirlineLogo airline={airline} size={44} />
+                    <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 190 }}>
+                      <AirlineLogo airline={airline} size={48} />
                       <div>
-                        <div style={{ fontSize: 14, fontWeight: 600, color: "#1E293B" }}>{airline.name}</div>
-                        <div style={{ fontSize: 12, color: "#94A3B8" }}>{flight.flightNumber || flight.id} &middot; {flight.cabin}</div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                          <div style={{ fontSize: 15, fontWeight: 700, color: "#0F172A" }}>{airline.name}</div>
+                          {i === 0 && (
+                            <span style={{ background: "#DCFCE7", color: "#166534", fontSize: 10, fontWeight: 800, padding: "3px 7px", borderRadius: 999 }}>
+                              Best Value
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: 12, color: "#64748B" }}>{flight.flightNumber || flight.id} &middot; {flight.cabin}</div>
                       </div>
                     </div>
                     <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 16, minWidth: 260 }}>
@@ -959,8 +966,12 @@ function ResultsPage({ searchParams, onBack, onSelect }) {
                       </div>
                       <div style={{ textAlign: "center" }}><div style={{ fontSize: 24, fontWeight: 800, color: "#0F172A" }}>{flight.arrTime}</div><div style={{ fontSize: 12, color: "#64748B" }}>{currentToAirport?.code}</div></div>
                     </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 210, justifyContent: "flex-end" }}>
-                      <div style={{ textAlign: "right" }}><span style={{ fontSize: 28, fontWeight: 800, color: "#0F172A" }}>${flight.price}</span><div style={{ fontSize: 12, color: "#94A3B8", marginTop: 2 }}>per person</div></div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 230, justifyContent: "flex-end" }}>
+                      <div style={{ textAlign: "right", minWidth: 110 }}>
+                        <div style={{ fontSize: 11, color: "#64748B", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.4 }}>Round trip</div>
+                        <span style={{ fontSize: 30, fontWeight: 800, color: "#0F172A", lineHeight: 1 }}>${flight.price}</span>
+                        <div style={{ fontSize: 11, color: "#94A3B8", marginTop: 4 }}>incl. taxes & fees</div>
+                      </div>
                       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                         <button onClick={() => setDetailFlight({ flight, airline })} style={{ padding: "8px 14px", borderRadius: 10, border: "1px solid #E2E8F0", background: "#F8FAFC", color: "#334155", fontFamily: "'Outfit',sans-serif", fontSize: 12, fontWeight: 600, cursor: "pointer", transition: "all 0.15s", whiteSpace: "nowrap" }}
                           onMouseEnter={e => e.currentTarget.style.background = "#E2E8F0"} onMouseLeave={e => e.currentTarget.style.background = "#F8FAFC"}>Details</button>
