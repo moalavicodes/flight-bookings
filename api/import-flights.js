@@ -19,20 +19,20 @@ export default async function handler(req, res) {
     }
 
     const apiUrl =
-      `http://api.aviationstack.com/v1/flights` +
-      `?access_key=${aviationKey}` +
-      `&dep_iata=${encodeURIComponent(from)}` +
-      `&arr_iata=${encodeURIComponent(to)}` +
-      `&flight_date=${encodeURIComponent(date)}`;
+    `https://api.aviationstack.com/v1/flights` +
+    `?access_key=${aviationKey}` +
+    `&dep_iata=${encodeURIComponent(from)}` +
+    `&arr_iata=${encodeURIComponent(to)}`;
 
     const aviationResp = await fetch(apiUrl);
     const aviationJson = await aviationResp.json();
 
     if (!aviationResp.ok || aviationJson.error) {
-      return res.status(400).json({
+    console.error("Aviationstack error:", JSON.stringify(aviationJson, null, 2));
+    return res.status(400).json({
         error: "Aviationstack request failed",
         details: aviationJson.error || aviationJson
-      });
+    });
     }
 
     const rows = (aviationJson.data || []).map((f) => {
