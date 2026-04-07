@@ -12,7 +12,7 @@ const mapAirlineRowToUi = (a) => ({
   code: a.code,
   name: a.name,
   color: a.color || "#64748B",
-  logo: a.logo_url || `https://via.placeholder.com/80x80.png?text=${a.code}`,
+  logo: a.logo_url || "",
 });
 
 const mapFlightRowToUi = (f) => ({
@@ -170,12 +170,57 @@ const XIcon = () => (<svg width="16" height="16" viewBox="0 0 24 24" fill="none"
 
 /* ─────────────────────── AIRLINE LOGO ─────────────────────── */
 function AirlineLogo({ airline, size = 44 }) {
-  if (airline.logo) {
-    return <img src={airline.logo} alt={airline.name} style={{ width: size, height: size, borderRadius: size > 36 ? 12 : 8, objectFit: "contain", background: "#F8FAFC", flexShrink: 0 }} />;
-  }
   return (
-    <div style={{ width: size, height: size, borderRadius: size > 36 ? 12 : 8, display: "flex", alignItems: "center", justifyContent: "center", background: `linear-gradient(135deg,${airline.color}22,${airline.color}0A)`, fontWeight: 800, fontSize: size * 0.34, color: airline.color, letterSpacing: 0.5, flexShrink: 0 }}>
-      {airline.code}
+    <div
+      style={{
+        width: size,
+        height: size,
+        borderRadius: size > 36 ? 12 : 8,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "#F8FAFC",
+        border: "1px solid #E2E8F0",
+        overflow: "hidden",
+        flexShrink: 0
+      }}
+    >
+      {airline.logo ? (
+        <img
+          src={airline.logo}
+          alt={airline.name}
+          onError={(e) => {
+            e.currentTarget.style.display = "none";
+            const fallback = e.currentTarget.parentElement?.querySelector(".airline-fallback");
+            if (fallback) fallback.style.display = "flex";
+          }}
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "contain",
+            padding: 6,
+            background: "#fff"
+          }}
+        />
+      ) : null}
+
+      <div
+        className="airline-fallback"
+        style={{
+          display: airline.logo ? "none" : "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          width: "100%",
+          height: "100%",
+          fontWeight: 800,
+          fontSize: size * 0.34,
+          color: airline.color || "#334155",
+          letterSpacing: 0.5,
+          background: `linear-gradient(135deg,${(airline.color || "#64748B")}22,${(airline.color || "#64748B")}0A)`
+        }}
+      >
+        {airline.code}
+      </div>
     </div>
   );
 }
