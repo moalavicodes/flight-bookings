@@ -29,9 +29,10 @@ const mapFlightRowToUi = (f) => ({
   stops: f.stops,
   cabin: f.cabin,
   price: Number(
-  f.price_override ??
-  (Number(f.price || 0) + Number(f.markup || 0) + Number(f.tax || 0))
-),
+    f.display_price ??
+    f.price_override ??
+    (Number(f.price || 0) + Number(f.markup || 0) + Number(f.tax || 0))
+  ),
   tax: Number(f.tax || 0),
   baggage: f.baggage,
   fareRules: f.fare_rules,
@@ -984,12 +985,10 @@ function ResultsPage({ searchParams, onBack, onSelect }) {
 function PaymentPage({ flightSelection, passengers, fromAirport, toAirport, onBack }) {
   const { outbound, returnFlight } = flightSelection;
   const isRT = !!returnFlight;
-  const outboundTax = outbound.tax || 0;
-  const returnTax = returnFlight ? (returnFlight.tax || 0) : 0;
-  const baseFarePerPerson = outbound.price + (returnFlight ? returnFlight.price : 0);
-  const taxPerPerson = outboundTax + returnTax;
-  const totalPP = baseFarePerPerson + taxPerPerson;
-  const grand = totalPP * passengers;
+  const shownFarePerPerson = Number(outbound.price || 0);
+  const taxPerPerson = Number(outbound.tax || 0);
+  const baseFarePerPerson = Math.max(0, shownFarePerPerson - taxPerPerson);
+  const grand = shownFarePerPerson * passengers;
   const [pax, setPax] = useState(Array.from({ length: passengers }, () => ({ firstName: "", lastName: "", email: "", dob: "" })));
   const [cn, setCn] = useState(""); const [cnum, setCnum] = useState(""); const [exp, setExp] = useState(""); const [cvc, setCvc] = useState("");
   const [billingCountry, setBillingCountry] = useState(""); const [billingZip, setBillingZip] = useState("");
