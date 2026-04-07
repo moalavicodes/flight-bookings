@@ -28,7 +28,10 @@ const mapFlightRowToUi = (f) => ({
   durationMin: f.duration_min,
   stops: f.stops,
   cabin: f.cabin,
-  price: Number(f.price || 0),
+  price: Number(
+  f.price_override ??
+  (Number(f.price || 0) + Number(f.markup || 0) + Number(f.tax || 0))
+),
   tax: Number(f.tax || 0),
   baggage: f.baggage,
   fareRules: f.fare_rules,
