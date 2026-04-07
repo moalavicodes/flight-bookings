@@ -1,7 +1,41 @@
 import { useState, useEffect, useMemo, useRef, createContext, useContext } from "react";
+import { createClient } from "@supabase/supabase-js";
 
 /* ─────────────────────── CONTEXT ─────────────────────── */
 const AppContext = createContext();
+const supabase = createClient(
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_ANON_KEY
+);
+
+const mapAirlineRowToUi = (a) => ({
+  code: a.code,
+  name: a.name,
+  color: a.color || "#64748B",
+  logo: a.logo_url || "",
+});
+
+const mapFlightRowToUi = (f) => ({
+  id: f.id,
+  airlineCode: f.airline_code,
+  flightNumber: f.flight_number,
+  from: f.from_code,
+  to: f.to_code,
+  date: f.flight_date,
+  depTime: f.dep_time,
+  arrTime: f.arr_time,
+  duration: f.duration_text,
+  durationMin: f.duration_min,
+  stops: f.stops,
+  cabin: f.cabin,
+  price: Number(f.price || 0),
+  tax: Number(f.tax || 0),
+  baggage: f.baggage,
+  fareRules: f.fare_rules,
+  meals: f.meals,
+  seatPitch: f.seat_pitch,
+  wifi: f.wifi,
+});
 
 /* ─────────────────────── DATA ─────────────────────── */
 const DEFAULT_AIRLINES = [
@@ -283,44 +317,179 @@ function AdminPanel({ onClose }) {
     });
   };
 
-  const addAirline = () => {
+  const addAirline = async () => {
     if (!newAirline.code || !newAirline.name) return alert("Code and name required");
     if (airlines.find(a => a.code === newAirline.code)) return alert("Airline code already exists");
-    setAirlines(prev => [...prev, { ...newAirline }]);
+
+    const { data, error } = await supabase
+      .from("airlines")
+      .insert({
+        code: newAirline.code,
+        name: newAirline.name,
+        color: newAirline.color,
+        logo_url: newAirline.logo || null,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Add airline error:", error);
+      return alert(error.message);
+    }
+
+    setAirlines(prev => [...prev, mapAirlineRowToUi(data)]);
     setNewAirline({ code: "", name: "", color: "#0891B2", logo: "" });
   };
+
   const startEditAirline = (a) => { setEditAirlineCode(a.code); setEditAirlineForm({ ...a }); };
-  const saveAirline = () => { setAirlines(prev => prev.map(a => a.code === editAirlineCode ? { ...editAirlineForm } : a)); setEditAirlineCode(null); };
-  const deleteAirline = (code) => { if (flights.some(f => f.airlineCode === code)) return alert("Remove flights for this airline first."); setAirlines(prev => prev.filter(a => a.code !== code)); };
+
+  const saveAirline = async () => {
+    const { data, error } = await supabase
+      .from("airlines")
+      .update({
+        name: editAirlineForm.name,
+        color: editAirlineForm.color,
+        logo_url: editAirlineForm.logo || null,
+      })
+      .eq("code", editAirlineCode)
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Save airline error:", error);
+      return alert(error.message);
+    }
+
+    setAirlines(prev => prev.map(a => a.code === editAirlineCode ? mapAirlineRowToUi(data) : a));
+    setEditAirlineCode(null);
+  };
+
+  const deleteAirline = async (code) => {
+    if (flights.some(f => f.airlineCode === code)) return alert("Remove flights for this airline first.");
+
+    const { error } = await supabase.from("airlines").delete().eq("code", code);
+    if (error) {
+      console.error("Delete airline error:", error);
+      return alert(error.message);
+    }
+
+    setAirlines(prev => prev.filter(a => a.code !== code));
+  };
 
   const startEdit = (f) => { setEditingId(f.id); setEditForm({ ...f }); };
-  const saveEdit = () => { setFlights(prev => prev.map(f => f.id === editingId ? { ...editForm } : f)); setEditingId(null); };
-  const deleteFlight = (id) => { setFlights(prev => prev.filter(f => f.id !== id)); };
 
-  const addFlight = () => {
-    const fn1 = addForm.flightNumber || `${addForm.airlineCode}${Math.floor(100 + Math.random() * 900)}`;
-    const newId1 = `${addForm.airlineCode}-${String(Date.now()).slice(-4)}`;
-    const outbound = { ...addForm, id: newId1, flightNumber: fn1 };
-    const newFlights = [outbound];
+  const saveEdit = async () => {
+    const { data, error } = await supabase
+      .from("flights")
+      .update({
+        flight_number: editForm.flightNumber || null,
+        airline_code: editForm.airlineCode,
+        from_code: editForm.from,
+        to_code: editForm.to,
+        flight_date: editForm.date,
+        dep_time: editForm.depTime,
+        arr_time: editForm.arrTime,
+        duration_text: editForm.duration,
+        duration_min: editForm.durationMin || null,
+        stops: editForm.stops,
+        cabin: editForm.cabin,
+        price: editForm.price,
+        tax: editForm.tax || 0,
+        baggage: editForm.baggage,
+        fare_rules: editForm.fareRules,
+        meals: editForm.meals,
+        seat_pitch: editForm.seatPitch,
+        wifi: editForm.wifi,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", editingId)
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Save flight error:", error);
+      return alert(error.message);
+    }
+
+    setFlights(prev => prev.map(f => f.id === editingId ? mapFlightRowToUi(data) : f));
+    setEditingId(null);
+  };
+
+  const deleteFlight = async (id) => {
+    const { error } = await supabase.from("flights").delete().eq("id", id);
+    if (error) {
+      console.error("Delete flight error:", error);
+      return alert(error.message);
+    }
+    setFlights(prev => prev.filter(f => f.id !== id));
+  };
+
+  const addFlight = async () => {
+    const outboundPayload = {
+      airline_code: addForm.airlineCode,
+      flight_number: addForm.flightNumber || null,
+      from_code: addForm.from,
+      to_code: addForm.to,
+      flight_date: addForm.date,
+      dep_time: addForm.depTime,
+      arr_time: addForm.arrTime,
+      duration_text: addForm.duration,
+      duration_min: addForm.durationMin || null,
+      stops: addForm.stops,
+      cabin: addForm.cabin,
+      price: addForm.price,
+      tax: addForm.tax || 0,
+      baggage: addForm.baggage,
+      fare_rules: addForm.fareRules,
+      meals: addForm.meals,
+      seat_pitch: addForm.seatPitch,
+      wifi: addForm.wifi,
+      is_visible: true,
+      is_manual: true,
+    };
+
+    const payloads = [outboundPayload];
 
     if (addRoundTrip) {
-      const fn2 = returnForm.flightNumber || `${addForm.airlineCode}${Math.floor(100 + Math.random() * 900)}`;
-      const newId2 = `${addForm.airlineCode}-${String(Date.now()).slice(-3)}R`;
-      const retDate = returnForm.date || addForm.date;
-      newFlights.push({
-        ...addForm,
-        id: newId2, flightNumber: fn2,
-        from: addForm.to, to: addForm.from,
-        date: retDate,
-        depTime: returnForm.depTime, arrTime: returnForm.arrTime,
-        duration: returnForm.duration, price: returnForm.price, tax: returnForm.tax,
+      payloads.push({
+        airline_code: addForm.airlineCode,
+        flight_number: returnForm.flightNumber || null,
+        from_code: addForm.to,
+        to_code: addForm.from,
+        flight_date: returnForm.date || addForm.date,
+        dep_time: returnForm.depTime,
+        arr_time: returnForm.arrTime,
+        duration_text: returnForm.duration,
+        duration_min: null,
+        stops: addForm.stops,
+        cabin: addForm.cabin,
+        price: returnForm.price,
+        tax: returnForm.tax || 0,
+        baggage: addForm.baggage,
+        fare_rules: addForm.fareRules,
+        meals: addForm.meals,
+        seat_pitch: addForm.seatPitch,
+        wifi: addForm.wifi,
+        is_visible: true,
+        is_manual: true,
       });
     }
 
-    setFlights(prev => [...prev, ...newFlights]);
+    const { data, error } = await supabase
+      .from("flights")
+      .insert(payloads)
+      .select();
+
+    if (error) {
+      console.error("Add flight error:", error);
+      return alert(error.message);
+    }
+
+    setFlights(prev => [...prev, ...(data || []).map(mapFlightRowToUi)]);
     setShowAdd(false);
-    setAddForm(emptyFlight);
     setAddRoundTrip(false);
+    setAddForm(emptyFlight);
+    setReturnForm({ flightNumber: "", date: "", depTime: "14:00", arrTime: "17:00", duration: "3h", price: 199, tax: 24 });
   };
 
   return (
@@ -589,7 +758,7 @@ function SearchPage({ onSearch }) {
       <div style={{ position: "relative", zIndex: 2, maxWidth: 1100, margin: "0 auto", padding: "32px 24px 0" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 60 }}>
           <div style={{ width: 42, height: 42, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,0.12)", backdropFilter: "blur(10px)" }}><PlaneIcon size={22} color="#5EEAD4" /></div>
-          <span style={{ fontFamily: "'Playfair Display',serif", fontSize: 22, fontWeight: 700, color: "#F0FDFA", letterSpacing: -0.5 }}>JetStream</span>
+          <span style={{ fontFamily: "'Playfair Display',serif", fontSize: 22, fontWeight: 700, color: "#F0FDFA", letterSpacing: -0.5 }}>CheapnFly</span>
         </div>
         <div style={{ maxWidth: 600, marginBottom: 48, animation: "fadeUp 0.6s ease-out" }}>
           <h1 style={{ fontFamily: "'Playfair Display',serif", fontSize: 48, fontWeight: 800, color: "#fff", lineHeight: 1.15, marginBottom: 16 }}>Where will your<br />next journey take you?</h1>
@@ -703,7 +872,7 @@ function ResultsPage({ searchParams, onBack, onSelect }) {
       <div style={{ background: "#0F172A", padding: "16px 24px" }}>
         <div style={{ maxWidth: 1200, margin: "0 auto", display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
           <button onClick={onBack} style={{ background: "rgba(255,255,255,0.08)", border: "none", borderRadius: 10, padding: "8px 12px", cursor: "pointer", color: "#94A3B8", display: "flex", alignItems: "center", gap: 6, fontFamily: "'Outfit',sans-serif", fontSize: 13, fontWeight: 500 }}><BackIcon /> New Search</button>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}><PlaneIcon size={18} color="#5EEAD4" /><span style={{ fontFamily: "'Playfair Display',serif", fontSize: 18, fontWeight: 700, color: "#F0FDFA" }}>JetStream</span></div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}><PlaneIcon size={18} color="#5EEAD4" /><span style={{ fontFamily: "'Playfair Display',serif", fontSize: 18, fontWeight: 700, color: "#F0FDFA" }}>CheapnFly</span></div>
           <div style={{ flex: 1 }} />
           <div style={{ display: "flex", alignItems: "center", gap: 12, color: "#E2E8F0", fontSize: 14, fontWeight: 500 }}>
             <span style={{ fontWeight: 700 }}>{fromAirport?.city}</span>
@@ -842,7 +1011,7 @@ function PaymentPage({ flightSelection, passengers, fromAirport, toAirport, onBa
       <div style={{ background: "#0F172A", padding: "16px 24px" }}>
         <div style={{ maxWidth: 1000, margin: "0 auto", display: "flex", alignItems: "center", gap: 16 }}>
           <button onClick={onBack} style={{ background: "rgba(255,255,255,0.08)", border: "none", borderRadius: 10, padding: "8px 12px", cursor: "pointer", color: "#94A3B8", display: "flex", alignItems: "center", gap: 6, fontFamily: "'Outfit',sans-serif", fontSize: 13, fontWeight: 500 }}><BackIcon /> Back</button>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}><PlaneIcon size={18} color="#5EEAD4" /><span style={{ fontFamily: "'Playfair Display',serif", fontSize: 18, fontWeight: 700, color: "#F0FDFA" }}>JetStream</span></div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}><PlaneIcon size={18} color="#5EEAD4" /><span style={{ fontFamily: "'Playfair Display',serif", fontSize: 18, fontWeight: 700, color: "#F0FDFA" }}>CheapnFly</span></div>
         </div>
       </div>
       <div style={{ maxWidth: 1000, margin: "0 auto", padding: "32px 24px", display: "flex", gap: 32, flexWrap: "wrap", alignItems: "flex-start" }}>
@@ -869,7 +1038,7 @@ function PaymentPage({ flightSelection, passengers, fromAirport, toAirport, onBa
             <p style={{ color: "#64748B", fontSize: 14, marginBottom: 28 }}>Review your itinerary and complete your secure checkout.</p>
             <div style={{ background: "#fff", borderRadius: 18, border: "1px solid #E2E8F0", padding: 24 }}>
               <div style={{ background: "#EFF6FF", border: "1px solid #BFDBFE", color: "#1D4ED8", borderRadius: 12, padding: "12px 14px", fontSize: 13, fontWeight: 500, marginBottom: 16 }}>
-                🔒 Secure checkout powered by JetStream Payments. Your payment information is encrypted and protected.
+                🔒 Secure checkout powered by CheapnFly Payments. Your payment information is encrypted and protected.
               </div>
               <InputField label="Cardholder Name" value={cn} onChange={setCn} placeholder="John Doe" /><div style={{ height: 12 }} />
               <InputField label="Card Number" value={cnum} onChange={setCnum} placeholder="4242 4242 4242 4242" /><div style={{ height: 12 }} />
@@ -905,17 +1074,9 @@ function PaymentPage({ flightSelection, passengers, fromAirport, toAirport, onBa
 
 /* ─────────────────────── MAIN APP WITH HISTORY API ─────────────────────── */
 export default function App() {
-  const [airlines, setAirlines] = useState(() => {
-    const saved = localStorage.getItem("jetstream_airlines");
-    return saved ? JSON.parse(saved) : DEFAULT_AIRLINES;
-  });
-  const [flights, setFlights] = useState(() => {
-    const saved = localStorage.getItem("jetstream_flights");
-    if (saved) return JSON.parse(saved);
-    const savedAirlines = localStorage.getItem("jetstream_airlines");
-    const parsedAirlines = savedAirlines ? JSON.parse(savedAirlines) : DEFAULT_AIRLINES;
-    return generateDefaultFlights(parsedAirlines);
-  });
+  const [airlines, setAirlines] = useState([]);
+  const [flights, setFlights] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [page, setPage] = useState("search");
   const [searchParams, setSearchParams] = useState(null);
   const [flightSelection, setFlightSelection] = useState(null);
@@ -923,13 +1084,45 @@ export default function App() {
   const [adminAuth, setAdminAuth] = useState(false);
   const ADMIN_PASSWORD = "admin123";
 
-  // Browser back button support
   const navigate = (newPage, data) => {
     if (newPage === "results") { setSearchParams(data); }
     if (newPage === "payment") { setFlightSelection(data); }
     setPage(newPage);
     window.history.pushState({ page: newPage }, "", `#${newPage}`);
   };
+
+  useEffect(() => {
+    async function loadData() {
+      setLoading(true);
+
+      const { data: airlinesData, error: airlinesError } = await supabase
+        .from("airlines")
+        .select("*")
+        .order("name", { ascending: true });
+
+      const { data: flightsData, error: flightsError } = await supabase
+        .from("flights")
+        .select("*")
+        .eq("is_visible", true)
+        .order("flight_date", { ascending: true });
+
+      if (airlinesError) {
+        console.error("Airlines load error:", airlinesError);
+      } else {
+        setAirlines((airlinesData || []).map(mapAirlineRowToUi));
+      }
+
+      if (flightsError) {
+        console.error("Flights load error:", flightsError);
+      } else {
+        setFlights((flightsData || []).map(mapFlightRowToUi));
+      }
+
+      setLoading(false);
+    }
+
+    loadData();
+  }, []);
 
   useEffect(() => {
     window.history.replaceState({ page: "search" }, "", "#search");
@@ -943,19 +1136,15 @@ export default function App() {
     window.addEventListener("popstate", handler);
     return () => window.removeEventListener("popstate", handler);
   }, []);
-  useEffect(() => {
-    localStorage.setItem("jetstream_airlines", JSON.stringify(airlines));
-  }, [airlines]);
-
-  useEffect(() => {
-    localStorage.setItem("jetstream_flights", JSON.stringify(flights));
-  }, [flights]);
-
 
   const handleAdminToggle = () => {
     if (adminAuth) { setShowAdmin(!showAdmin); }
     else { const p = prompt("Enter admin password:"); if (p === ADMIN_PASSWORD) { setAdminAuth(true); setShowAdmin(true); } else if (p !== null) { alert("Incorrect password"); } }
   };
+
+  if (loading) {
+    return <div style={{ padding: 40, fontFamily: "'Outfit', sans-serif" }}>Loading...</div>;
+  }
 
   return (
     <AppContext.Provider value={{ flights, setFlights, airlines, setAirlines }}>
