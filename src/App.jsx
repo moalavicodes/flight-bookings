@@ -66,6 +66,7 @@ const AIRPORTS = [
   { code: "CDG", city: "Paris", name: "Charles de Gaulle" },
   { code: "DXB", city: "Dubai", name: "Dubai Intl" },
   { code: "NRT", city: "Tokyo", name: "Narita Intl" },
+  { code: "DEL", city: "Delhi", name: "Indira Gandhi Intl" },
 ];
 
 function toDateStr(d) {
