@@ -1,19 +1,21 @@
 import { useState, useEffect, useMemo, useRef, createContext, useContext } from "react";
-import { createClient } from "@supabase/supabase-js";
-
+import { supabase } from "./lib/supabase";
 /* ─────────────────────── CONTEXT ─────────────────────── */
 const AppContext = createContext();
-const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_ANON_KEY
-);
-
 const mapAirlineRowToUi = (a) => ({
   code: a.code,
   name: a.name,
   color: a.color || "#64748B",
   logo: a.logo_url || "",
 });
+
+function getDisplayedPrice(flight) {
+  return Number(
+    flight.display_price ??
+    flight.price_override ??
+    (Number(flight.price || 0) + Number(flight.markup || 0) + Number(flight.tax || 0))
+  );
+}
 
 const mapFlightRowToUi = (f) => ({
   id: f.id,
@@ -28,11 +30,7 @@ const mapFlightRowToUi = (f) => ({
   durationMin: f.duration_min,
   stops: f.stops,
   cabin: f.cabin,
-  price: Number(
-    f.display_price ??
-    f.price_override ??
-    (Number(f.price || 0) + Number(f.markup || 0) + Number(f.tax || 0))
-  ),
+  price: getDisplayedPrice(f),
   tax: Number(f.tax || 0),
   baggage: f.baggage,
   fareRules: f.fare_rules,
@@ -40,33 +38,80 @@ const mapFlightRowToUi = (f) => ({
   seatPitch: f.seat_pitch,
   wifi: f.wifi,
 });
-
-/* ─────────────────────── DATA ─────────────────────── */
-const DEFAULT_AIRLINES = [
-  { code: "SK", name: "SkyPulse Air", color: "#0891B2", logo: "" },
-  { code: "NV", name: "NovaJet", color: "#EA580C", logo: "" },
-  { code: "AZ", name: "Azure Wings", color: "#0D9488", logo: "" },
-  { code: "EM", name: "Ember Aviation", color: "#DC2626", logo: "" },
-  { code: "PN", name: "Pinnacle Air", color: "#7C3AED", logo: "" },
-  { code: "CR", name: "Crest Airlines", color: "#2563EB", logo: "" },
-];
-
 const AIRPORTS = [
-  { code: "JFK", city: "New York", name: "John F. Kennedy Intl" },
-  { code: "LAX", city: "Los Angeles", name: "Los Angeles Intl" },
-  { code: "ORD", city: "Chicago", name: "O'Hare Intl" },
-  { code: "MIA", city: "Miami", name: "Miami Intl" },
-  { code: "SFO", city: "San Francisco", name: "San Francisco Intl" },
-  { code: "SEA", city: "Seattle", name: "Seattle-Tacoma Intl" },
-  { code: "DFW", city: "Dallas", name: "Dallas/Fort Worth Intl" },
-  { code: "ATL", city: "Atlanta", name: "Hartsfield-Jackson Intl" },
-  { code: "DEN", city: "Denver", name: "Denver Intl" },
-  { code: "BOS", city: "Boston", name: "Logan Intl" },
-  { code: "LHR", city: "London", name: "Heathrow" },
-  { code: "CDG", city: "Paris", name: "Charles de Gaulle" },
-  { code: "DXB", city: "Dubai", name: "Dubai Intl" },
-  { code: "NRT", city: "Tokyo", name: "Narita Intl" },
-  { code: "DEL", city: "Delhi", name: "Indira Gandhi Intl" },
+  { code: "JFK", city: "New York", name: "John F. Kennedy International Airport" },
+  { code: "EWR", city: "Newark", name: "Newark Liberty International Airport" },
+  { code: "LGA", city: "New York", name: "LaGuardia Airport" },
+  { code: "LAX", city: "Los Angeles", name: "Los Angeles International Airport" },
+  { code: "ORD", city: "Chicago", name: "O'Hare International Airport" },
+  { code: "ATL", city: "Atlanta", name: "Hartsfield-Jackson Atlanta International Airport" },
+  { code: "MIA", city: "Miami", name: "Miami International Airport" },
+  { code: "FLL", city: "Fort Lauderdale", name: "Fort Lauderdale-Hollywood International Airport" },
+  { code: "SFO", city: "San Francisco", name: "San Francisco International Airport" },
+  { code: "SEA", city: "Seattle", name: "Seattle-Tacoma International Airport" },
+  { code: "DFW", city: "Dallas", name: "Dallas/Fort Worth International Airport" },
+  { code: "DEN", city: "Denver", name: "Denver International Airport" },
+  { code: "BOS", city: "Boston", name: "Logan International Airport" },
+  { code: "PHL", city: "Philadelphia", name: "Philadelphia International Airport" },
+  { code: "IAD", city: "Washington", name: "Washington Dulles International Airport" },
+  { code: "DCA", city: "Washington", name: "Ronald Reagan Washington National Airport" },
+  { code: "CLT", city: "Charlotte", name: "Charlotte Douglas International Airport" },
+  { code: "IAH", city: "Houston", name: "George Bush Intercontinental Airport" },
+  { code: "PHX", city: "Phoenix", name: "Phoenix Sky Harbor International Airport" },
+  { code: "LAS", city: "Las Vegas", name: "Harry Reid International Airport" },
+  { code: "MSP", city: "Minneapolis", name: "Minneapolis-Saint Paul International Airport" },
+  { code: "DTW", city: "Detroit", name: "Detroit Metropolitan Wayne County Airport" },
+
+  { code: "YYZ", city: "Toronto", name: "Toronto Pearson International Airport" },
+  { code: "YVR", city: "Vancouver", name: "Vancouver International Airport" },
+
+  { code: "LHR", city: "London", name: "Heathrow Airport" },
+  { code: "LGW", city: "London", name: "Gatwick Airport" },
+  { code: "CDG", city: "Paris", name: "Charles de Gaulle Airport" },
+  { code: "AMS", city: "Amsterdam", name: "Amsterdam Airport Schiphol" },
+  { code: "FRA", city: "Frankfurt", name: "Frankfurt Airport" },
+  { code: "MUC", city: "Munich", name: "Munich Airport" },
+  { code: "MAD", city: "Madrid", name: "Adolfo Suarez Madrid-Barajas Airport" },
+  { code: "BCN", city: "Barcelona", name: "Barcelona-El Prat Airport" },
+  { code: "FCO", city: "Rome", name: "Leonardo da Vinci International Airport" },
+  { code: "ZRH", city: "Zurich", name: "Zurich Airport" },
+  { code: "IST", city: "Istanbul", name: "Istanbul Airport" },
+
+  { code: "DXB", city: "Dubai", name: "Dubai International Airport" },
+  { code: "DWC", city: "Dubai", name: "Al Maktoum International Airport" },
+  { code: "AUH", city: "Abu Dhabi", name: "Zayed International Airport" },
+  { code: "DOH", city: "Doha", name: "Hamad International Airport" },
+  { code: "SHJ", city: "Sharjah", name: "Sharjah International Airport" },
+  { code: "JED", city: "Jeddah", name: "King Abdulaziz International Airport" },
+  { code: "RUH", city: "Riyadh", name: "King Khalid International Airport" },
+  { code: "MCT", city: "Muscat", name: "Muscat International Airport" },
+  { code: "KWI", city: "Kuwait City", name: "Kuwait International Airport" },
+  { code: "BAH", city: "Manama", name: "Bahrain International Airport" },
+
+  { code: "DEL", city: "Delhi", name: "Indira Gandhi International Airport" },
+  { code: "BOM", city: "Mumbai", name: "Chhatrapati Shivaji Maharaj International Airport" },
+  { code: "BLR", city: "Bengaluru", name: "Kempegowda International Airport" },
+  { code: "HYD", city: "Hyderabad", name: "Rajiv Gandhi International Airport" },
+  { code: "MAA", city: "Chennai", name: "Chennai International Airport" },
+  { code: "CCU", city: "Kolkata", name: "Netaji Subhas Chandra Bose International Airport" },
+  { code: "AMD", city: "Ahmedabad", name: "Sardar Vallabhbhai Patel International Airport" },
+  { code: "PNQ", city: "Pune", name: "Pune Airport" },
+  { code: "GOI", city: "Goa", name: "Dabolim Airport" },
+  { code: "IDR", city: "Indore", name: "Devi Ahilya Bai Holkar Airport" },
+  { code: "COK", city: "Kochi", name: "Cochin International Airport" },
+  { code: "LKO", city: "Lucknow", name: "Chaudhary Charan Singh International Airport" },
+  { code: "JAI", city: "Jaipur", name: "Jaipur International Airport" },
+
+  { code: "NRT", city: "Tokyo", name: "Narita International Airport" },
+  { code: "HND", city: "Tokyo", name: "Haneda Airport" },
+  { code: "KIX", city: "Osaka", name: "Kansai International Airport" },
+  { code: "ICN", city: "Seoul", name: "Incheon International Airport" },
+  { code: "SIN", city: "Singapore", name: "Singapore Changi Airport" },
+  { code: "BKK", city: "Bangkok", name: "Suvarnabhumi Airport" },
+  { code: "HKG", city: "Hong Kong", name: "Hong Kong International Airport" },
+  { code: "KUL", city: "Kuala Lumpur", name: "Kuala Lumpur International Airport" },
+  { code: "SYD", city: "Sydney", name: "Sydney Airport" },
+  { code: "MEL", city: "Melbourne", name: "Melbourne Airport" },
 ];
 
 function toDateStr(d) {
@@ -130,29 +175,6 @@ function generateDefaultFlights(airlines) {
   return flights;
 }
 
-/* ─────────────────────── LOGO RESIZE UTILITY ─────────────────────── */
-function resizeImage(file, maxSize, callback) {
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    const img = new Image();
-    img.onload = () => {
-      const canvas = document.createElement("canvas");
-      let w = img.width, h = img.height;
-      if (w > maxSize || h > maxSize) {
-        if (w > h) { h = Math.round(h * maxSize / w); w = maxSize; }
-        else { w = Math.round(w * maxSize / h); h = maxSize; }
-      }
-      canvas.width = w;
-      canvas.height = h;
-      const ctx = canvas.getContext("2d");
-      ctx.drawImage(img, 0, 0, w, h);
-      callback(canvas.toDataURL("image/png", 0.9));
-    };
-    img.src = e.target.result;
-  };
-  reader.readAsDataURL(file);
-}
-
 /* ─────────────────────── ICONS ─────────────────────── */
 const PlaneIcon = ({ size = 20, color = "currentColor" }) => (<svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.8 19.2L16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z" /></svg>);
 const SwapIcon = () => (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 16V4m0 12l-3-3m3 3l3-3M17 8v12m0-12l3 3m-3-3l-3 3" /></svg>);
@@ -161,10 +183,6 @@ const ChevronDown = () => (<svg width="14" height="14" viewBox="0 0 24 24" fill=
 const CheckIcon = () => (<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7" /></svg>);
 const BackIcon = () => (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>);
 const UserIcon = () => (<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 00-4-4H9a4 4 0 00-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>);
-const GearIcon = () => (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" /></svg>);
-const TrashIcon = () => (<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" /></svg>);
-const PlusIcon = () => (<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>);
-const EditIcon = () => (<svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M10 2L12 4L5 11H3V9L10 2Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>);
 const BagIcon = () => (<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="7" width="18" height="14" rx="2" /><path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2" /></svg>);
 const InfoIcon = () => (<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><path d="M12 16v-4M12 8h.01" /></svg>);
 const XIcon = () => (<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12" /></svg>);
@@ -322,419 +340,6 @@ const InputField = ({ label, value, onChange, placeholder, type = "text", half =
       onFocus={e => e.target.style.borderColor = "#0891B2"} onBlur={e => e.target.style.borderColor = "#E2E8F0"} />
   </div>
 );
-const TextareaField = ({ label, value, onChange, placeholder, rows = 2 }) => (
-  <div>
-    <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#94A3B8", textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>{label}</label>
-    <textarea value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} rows={rows}
-      style={{ width: "100%", padding: "10px 14px", borderRadius: 10, border: "2px solid #E2E8F0", background: "#fff", fontSize: 13, fontWeight: 500, color: "#1E293B", outline: "none", fontFamily: "'Outfit',sans-serif", boxSizing: "border-box", transition: "border-color 0.2s", resize: "vertical" }}
-      onFocus={e => e.target.style.borderColor = "#0891B2"} onBlur={e => e.target.style.borderColor = "#E2E8F0"} />
-  </div>
-);
-
-const SS = { padding: "8px 12px", borderRadius: 8, border: "1px solid #E2E8F0", background: "#fff", fontFamily: "'Outfit',sans-serif", fontSize: 13, fontWeight: 500, color: "#1E293B", outline: "none", cursor: "pointer" };
-const IS = { ...SS, cursor: "text", width: "100%", boxSizing: "border-box" };
-
-/* ─────────────────────── ADMIN PANEL ─────────────────────── */
-function AdminPanel({ onClose }) {
-  const { flights, setFlights, airlines, setAirlines } = useContext(AppContext);
-  const [tab, setTab] = useState("flights");
-  const [filterRoute, setFilterRoute] = useState("all");
-  const [filterDate, setFilterDate] = useState("");
-  const [editingId, setEditingId] = useState(null);
-  const [editForm, setEditForm] = useState({});
-  const [showAdd, setShowAdd] = useState(false);
-  const [addRoundTrip, setAddRoundTrip] = useState(false);
-
-  const emptyFlight = { airlineCode: airlines[0]?.code || "SK", flightNumber: "", from: "JFK", to: "LAX", date: toDateStr(new Date()), depTime: "08:00", arrTime: "11:00", duration: "3h", durationMin: 180, stops: 0, cabin: "Economy", price: 199, tax: 24, baggage: "1 carry-on (7kg), 1 checked bag (23kg)", fareRules: "Non-refundable. Changes with fee.", meals: "Snacks included", seatPitch: "31 inches", wifi: "Available" };
-  const [addForm, setAddForm] = useState(emptyFlight);
-  const [returnForm, setReturnForm] = useState({ flightNumber: "", date: "", depTime: "14:00", arrTime: "17:00", duration: "3h", price: 199, tax: 24 });
-
-  // airline
-  const [newAirline, setNewAirline] = useState({ code: "", name: "", color: "#0891B2", logo: "" });
-  const [editAirlineCode, setEditAirlineCode] = useState(null);
-  const [editAirlineForm, setEditAirlineForm] = useState({});
-  const logoInputRef = useRef(null);
-  const editLogoInputRef = useRef(null);
-
-  const routes = useMemo(() => { const r = new Set(flights.map(f => `${f.from}-${f.to}`)); return [...r].sort(); }, [flights]);
-  const filtered = flights.filter(f => { if (filterRoute !== "all" && `${f.from}-${f.to}` !== filterRoute) return false; if (filterDate && f.date !== filterDate) return false; return true; }).sort((a, b) => a.date.localeCompare(b.date) || a.depTime.localeCompare(b.depTime));
-
-  const handleLogoUpload = (e, target) => {
-    const file = e.target.files[0]; if (!file) return;
-    resizeImage(file, 200, (dataUrl) => {
-      if (target === "new") setNewAirline(p => ({ ...p, logo: dataUrl }));
-      else if (target === "edit") setEditAirlineForm(p => ({ ...p, logo: dataUrl }));
-    });
-  };
-
-  const addAirline = async () => {
-    if (!newAirline.code || !newAirline.name) return alert("Code and name required");
-    if (airlines.find(a => a.code === newAirline.code)) return alert("Airline code already exists");
-
-    const { data, error } = await supabase
-      .from("airlines")
-      .insert({
-        code: newAirline.code,
-        name: newAirline.name,
-        color: newAirline.color,
-        logo_url: newAirline.logo || null,
-      })
-      .select()
-      .single();
-
-    if (error) {
-      console.error("Add airline error:", error);
-      return alert(error.message);
-    }
-
-    setAirlines(prev => [...prev, mapAirlineRowToUi(data)]);
-    setNewAirline({ code: "", name: "", color: "#0891B2", logo: "" });
-  };
-
-  const startEditAirline = (a) => { setEditAirlineCode(a.code); setEditAirlineForm({ ...a }); };
-
-  const saveAirline = async () => {
-    const { data, error } = await supabase
-      .from("airlines")
-      .update({
-        name: editAirlineForm.name,
-        color: editAirlineForm.color,
-        logo_url: editAirlineForm.logo || null,
-      })
-      .eq("code", editAirlineCode)
-      .select()
-      .single();
-
-    if (error) {
-      console.error("Save airline error:", error);
-      return alert(error.message);
-    }
-
-    setAirlines(prev => prev.map(a => a.code === editAirlineCode ? mapAirlineRowToUi(data) : a));
-    setEditAirlineCode(null);
-  };
-
-  const deleteAirline = async (code) => {
-    if (flights.some(f => f.airlineCode === code)) return alert("Remove flights for this airline first.");
-
-    const { error } = await supabase.from("airlines").delete().eq("code", code);
-    if (error) {
-      console.error("Delete airline error:", error);
-      return alert(error.message);
-    }
-
-    setAirlines(prev => prev.filter(a => a.code !== code));
-  };
-
-  const startEdit = (f) => { setEditingId(f.id); setEditForm({ ...f }); };
-
-  const saveEdit = async () => {
-    const { data, error } = await supabase
-      .from("flights")
-      .update({
-        flight_number: editForm.flightNumber || null,
-        airline_code: editForm.airlineCode,
-        from_code: editForm.from,
-        to_code: editForm.to,
-        flight_date: editForm.date,
-        dep_time: editForm.depTime,
-        arr_time: editForm.arrTime,
-        duration_text: editForm.duration,
-        duration_min: editForm.durationMin || null,
-        stops: editForm.stops,
-        cabin: editForm.cabin,
-        price: editForm.price,
-        tax: editForm.tax || 0,
-        baggage: editForm.baggage,
-        fare_rules: editForm.fareRules,
-        meals: editForm.meals,
-        seat_pitch: editForm.seatPitch,
-        wifi: editForm.wifi,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", editingId)
-      .select()
-      .single();
-
-    if (error) {
-      console.error("Save flight error:", error);
-      return alert(error.message);
-    }
-
-    setFlights(prev => prev.map(f => f.id === editingId ? mapFlightRowToUi(data) : f));
-    setEditingId(null);
-  };
-
-  const deleteFlight = async (id) => {
-    const { error } = await supabase.from("flights").delete().eq("id", id);
-    if (error) {
-      console.error("Delete flight error:", error);
-      return alert(error.message);
-    }
-    setFlights(prev => prev.filter(f => f.id !== id));
-  };
-
-  const addFlight = async () => {
-    const outboundPayload = {
-      airline_code: addForm.airlineCode,
-      flight_number: addForm.flightNumber || null,
-      from_code: addForm.from,
-      to_code: addForm.to,
-      flight_date: addForm.date,
-      dep_time: addForm.depTime,
-      arr_time: addForm.arrTime,
-      duration_text: addForm.duration,
-      duration_min: addForm.durationMin || null,
-      stops: addForm.stops,
-      cabin: addForm.cabin,
-      price: addForm.price,
-      tax: addForm.tax || 0,
-      baggage: addForm.baggage,
-      fare_rules: addForm.fareRules,
-      meals: addForm.meals,
-      seat_pitch: addForm.seatPitch,
-      wifi: addForm.wifi,
-      is_visible: true,
-      is_manual: true,
-    };
-
-    const payloads = [outboundPayload];
-
-    if (addRoundTrip) {
-      payloads.push({
-        airline_code: addForm.airlineCode,
-        flight_number: returnForm.flightNumber || null,
-        from_code: addForm.to,
-        to_code: addForm.from,
-        flight_date: returnForm.date || addForm.date,
-        dep_time: returnForm.depTime,
-        arr_time: returnForm.arrTime,
-        duration_text: returnForm.duration,
-        duration_min: null,
-        stops: addForm.stops,
-        cabin: addForm.cabin,
-        price: returnForm.price,
-        tax: returnForm.tax || 0,
-        baggage: addForm.baggage,
-        fare_rules: addForm.fareRules,
-        meals: addForm.meals,
-        seat_pitch: addForm.seatPitch,
-        wifi: addForm.wifi,
-        is_visible: true,
-        is_manual: true,
-      });
-    }
-
-    const { data, error } = await supabase
-      .from("flights")
-      .insert(payloads)
-      .select();
-
-    if (error) {
-      console.error("Add flight error:", error);
-      return alert(error.message);
-    }
-
-    setFlights(prev => [...prev, ...(data || []).map(mapFlightRowToUi)]);
-    setShowAdd(false);
-    setAddRoundTrip(false);
-    setAddForm(emptyFlight);
-    setReturnForm({ flightNumber: "", date: "", depTime: "14:00", arrTime: "17:00", duration: "3h", price: 199, tax: 24 });
-  };
-
-  return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex" }}>
-      <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)" }} />
-      <div style={{ position: "relative", marginLeft: "auto", width: "min(960px,92vw)", height: "100vh", background: "#F8FAFC", overflowY: "auto", boxShadow: "-8px 0 40px rgba(0,0,0,0.15)", animation: "slideIn 0.3s ease-out" }}>
-        <div style={{ position: "sticky", top: 0, zIndex: 10, background: "#0F172A", padding: "16px 24px" }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}><GearIcon /><span style={{ fontFamily: "'Outfit',sans-serif", fontSize: 18, fontWeight: 700, color: "#F0FDFA" }}>Admin Panel</span></div>
-            <button onClick={onClose} style={{ background: "rgba(255,255,255,0.1)", border: "none", borderRadius: 8, padding: "6px 14px", cursor: "pointer", color: "#94A3B8", fontFamily: "'Outfit',sans-serif", fontSize: 13, fontWeight: 600 }}>Close</button>
-          </div>
-          <div style={{ display: "flex", gap: 4 }}>
-            {["flights", "airlines"].map(t => (
-              <button key={t} onClick={() => setTab(t)} style={{ padding: "8px 20px", borderRadius: 8, border: "none", cursor: "pointer", fontFamily: "'Outfit',sans-serif", fontSize: 13, fontWeight: 600, background: tab === t ? "#0891B2" : "rgba(255,255,255,0.08)", color: tab === t ? "#fff" : "#94A3B8", transition: "all 0.2s", textTransform: "capitalize" }}>
-                {t === "flights" ? `Flights (${flights.length})` : `Airlines (${airlines.length})`}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div style={{ padding: 24 }}>
-          {/* ─── AIRLINES TAB ─── */}
-          {tab === "airlines" && (
-            <div>
-              <div style={{ background: "#fff", borderRadius: 16, border: "2px solid #0891B2", padding: 20, marginBottom: 24 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: "#0891B2", marginBottom: 4 }}>Add New Airline</div>
-                <div style={{ fontSize: 12, color: "#94A3B8", marginBottom: 16 }}>Logo will be auto-resized to 200x200px. For best results, upload a square image (PNG or JPG).</div>
-                <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
-                  <div style={{ minWidth: 80 }}><label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#94A3B8", marginBottom: 4 }}>Code (2-3 chars)</label><input value={newAirline.code} onChange={e => setNewAirline(p => ({ ...p, code: e.target.value.toUpperCase().slice(0, 3) }))} placeholder="AA" maxLength={3} style={{ ...IS, width: 80 }} /></div>
-                  <div style={{ flex: 1, minWidth: 150 }}><label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#94A3B8", marginBottom: 4 }}>Name</label><input value={newAirline.name} onChange={e => setNewAirline(p => ({ ...p, name: e.target.value }))} placeholder="American Airlines" style={IS} /></div>
-                  <div style={{ minWidth: 60 }}><label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#94A3B8", marginBottom: 4 }}>Color</label><input type="color" value={newAirline.color} onChange={e => setNewAirline(p => ({ ...p, color: e.target.value }))} style={{ width: 44, height: 36, border: "1px solid #E2E8F0", borderRadius: 8, cursor: "pointer", padding: 2 }} /></div>
-                  <div>
-                    <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#94A3B8", marginBottom: 4 }}>Logo (auto-resized)</label>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      {newAirline.logo && <img src={newAirline.logo} style={{ width: 36, height: 36, borderRadius: 8, objectFit: "contain", background: "#F8FAFC" }} alt="" />}
-                      <button onClick={() => logoInputRef.current?.click()} style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid #E2E8F0", background: "#F8FAFC", cursor: "pointer", fontFamily: "'Outfit',sans-serif", fontSize: 12, fontWeight: 600, color: "#64748B" }}>{newAirline.logo ? "Change" : "Upload"}</button>
-                      <input ref={logoInputRef} type="file" accept="image/*" onChange={e => handleLogoUpload(e, "new")} style={{ display: "none" }} />
-                    </div>
-                  </div>
-                  <button onClick={addAirline} style={{ padding: "10px 24px", borderRadius: 10, border: "none", background: "linear-gradient(135deg,#0891B2,#0E7490)", color: "#fff", fontFamily: "'Outfit',sans-serif", fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}><PlusIcon /> Add</button>
-                </div>
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(300px,1fr))", gap: 12 }}>
-                {airlines.map(a => {
-                  const isEdit = editAirlineCode === a.code;
-                  return (
-                    <div key={a.code} style={{ background: "#fff", borderRadius: 14, border: isEdit ? "2px solid #0891B2" : "1px solid #E2E8F0", padding: 16 }}>
-                      {isEdit ? (
-                        <div>
-                          <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-                            <div><label style={{ display: "block", fontSize: 10, fontWeight: 600, color: "#94A3B8", marginBottom: 4 }}>Code</label><input value={editAirlineForm.code} disabled style={{ ...IS, width: 60, background: "#F1F5F9" }} /></div>
-                            <div style={{ flex: 1 }}><label style={{ display: "block", fontSize: 10, fontWeight: 600, color: "#94A3B8", marginBottom: 4 }}>Name</label><input value={editAirlineForm.name} onChange={e => setEditAirlineForm(p => ({ ...p, name: e.target.value }))} style={IS} /></div>
-                            <div><label style={{ display: "block", fontSize: 10, fontWeight: 600, color: "#94A3B8", marginBottom: 4 }}>Color</label><input type="color" value={editAirlineForm.color} onChange={e => setEditAirlineForm(p => ({ ...p, color: e.target.value }))} style={{ width: 36, height: 32, border: "1px solid #E2E8F0", borderRadius: 6, cursor: "pointer", padding: 2 }} /></div>
-                          </div>
-                          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-                            {editAirlineForm.logo && <img src={editAirlineForm.logo} style={{ width: 36, height: 36, borderRadius: 8, objectFit: "contain", background: "#F8FAFC" }} alt="" />}
-                            <button onClick={() => editLogoInputRef.current?.click()} style={{ padding: "6px 12px", borderRadius: 6, border: "1px solid #E2E8F0", background: "#F8FAFC", cursor: "pointer", fontSize: 11, fontWeight: 600, color: "#64748B", fontFamily: "'Outfit',sans-serif" }}>{editAirlineForm.logo ? "Change Logo" : "Upload Logo"}</button>
-                            {editAirlineForm.logo && <button onClick={() => setEditAirlineForm(p => ({ ...p, logo: "" }))} style={{ padding: "6px 12px", borderRadius: 6, border: "1px solid #FEE2E2", background: "#FEF2F2", cursor: "pointer", fontSize: 11, fontWeight: 600, color: "#DC2626", fontFamily: "'Outfit',sans-serif" }}>Remove</button>}
-                            <input ref={editLogoInputRef} type="file" accept="image/*" onChange={e => handleLogoUpload(e, "edit")} style={{ display: "none" }} />
-                          </div>
-                          <div style={{ display: "flex", gap: 8 }}>
-                            <button onClick={saveAirline} style={{ padding: "6px 16px", borderRadius: 6, border: "none", background: "#0891B2", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Outfit',sans-serif" }}>Save</button>
-                            <button onClick={() => setEditAirlineCode(null)} style={{ padding: "6px 16px", borderRadius: 6, border: "1px solid #E2E8F0", background: "#fff", color: "#64748B", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Outfit',sans-serif" }}>Cancel</button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                          <AirlineLogo airline={a} size={44} />
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: 15, fontWeight: 700, color: "#1E293B" }}>{a.name}</div>
-                            <div style={{ fontSize: 12, color: "#94A3B8" }}>{a.code} &middot; <span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 3, background: a.color, verticalAlign: "middle" }} /> {a.color}</div>
-                          </div>
-                          <button onClick={() => startEditAirline(a)} style={{ width: 28, height: 28, borderRadius: 6, border: "1px solid #E2E8F0", background: "#F8FAFC", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#64748B" }}><EditIcon /></button>
-                          <button onClick={() => deleteAirline(a.code)} style={{ width: 28, height: 28, borderRadius: 6, border: "1px solid #FEE2E2", background: "#FEF2F2", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#DC2626" }}><TrashIcon /></button>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* ─── FLIGHTS TAB ─── */}
-          {tab === "flights" && (
-            <div>
-              <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap", alignItems: "flex-end" }}>
-                <div><label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#94A3B8", textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>Route</label><select value={filterRoute} onChange={e => setFilterRoute(e.target.value)} style={SS}><option value="all">All Routes</option>{routes.map(r => <option key={r} value={r}>{r}</option>)}</select></div>
-                <div><label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#94A3B8", textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>Date</label><input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} style={{ ...IS, width: 160 }} /></div>
-                <div style={{ flex: 1 }} />
-                <button onClick={() => { setShowAdd(!showAdd); setAddRoundTrip(false); }} style={{ padding: "10px 20px", borderRadius: 10, border: "none", background: showAdd ? "#DC2626" : "linear-gradient(135deg,#0891B2,#0E7490)", color: "#fff", fontFamily: "'Outfit',sans-serif", fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
-                  {showAdd ? "Cancel" : <><PlusIcon /> Add Flight</>}
-                </button>
-              </div>
-
-              {showAdd && (
-                <div style={{ background: "#fff", borderRadius: 16, border: "2px solid #0891B2", padding: 20, marginBottom: 20, animation: "fadeUp 0.2s ease-out" }}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: "#0891B2" }}>New Flight</div>
-                    <div style={{ display: "flex", gap: 4, background: "#F1F5F9", borderRadius: 8, padding: 3 }}>
-                      <button onClick={() => setAddRoundTrip(false)} style={{ padding: "6px 16px", borderRadius: 6, border: "none", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Outfit',sans-serif", background: !addRoundTrip ? "#fff" : "transparent", color: !addRoundTrip ? "#0F172A" : "#64748B", boxShadow: !addRoundTrip ? "0 1px 3px rgba(0,0,0,0.08)" : "none" }}>One Way</button>
-                      <button onClick={() => { setAddRoundTrip(true); if (!returnForm.date) { const d = new Date(addForm.date + "T12:00:00"); d.setDate(d.getDate() + 7); setReturnForm(p => ({ ...p, date: toDateStr(d) })); } }} style={{ padding: "6px 16px", borderRadius: 6, border: "none", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Outfit',sans-serif", background: addRoundTrip ? "#fff" : "transparent", color: addRoundTrip ? "#0F172A" : "#64748B", boxShadow: addRoundTrip ? "0 1px 3px rgba(0,0,0,0.08)" : "none" }}>Round Trip</button>
-                    </div>
-                  </div>
-
-                  <div style={{ fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 8 }}>Outbound Flight</div>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(130px,1fr))", gap: 10, marginBottom: 12 }}>
-                    <div><label style={{ display: "block", fontSize: 10, fontWeight: 600, color: "#94A3B8", marginBottom: 4 }}>Airline</label><select value={addForm.airlineCode} onChange={e => setAddForm(p => ({ ...p, airlineCode: e.target.value }))} style={SS}>{airlines.map(a => <option key={a.code} value={a.code}>{a.name}</option>)}</select></div>
-                    <div><label style={{ display: "block", fontSize: 10, fontWeight: 600, color: "#94A3B8", marginBottom: 4 }}>Flight Number</label><input value={addForm.flightNumber} onChange={e => setAddForm(p => ({ ...p, flightNumber: e.target.value.toUpperCase() }))} placeholder="SK101" style={IS} /></div>
-                    <div><label style={{ display: "block", fontSize: 10, fontWeight: 600, color: "#94A3B8", marginBottom: 4 }}>From</label><select value={addForm.from} onChange={e => setAddForm(p => ({ ...p, from: e.target.value }))} style={SS}>{AIRPORTS.map(a => <option key={a.code} value={a.code}>{a.city} ({a.code})</option>)}</select></div>
-                    <div><label style={{ display: "block", fontSize: 10, fontWeight: 600, color: "#94A3B8", marginBottom: 4 }}>To</label><select value={addForm.to} onChange={e => setAddForm(p => ({ ...p, to: e.target.value }))} style={SS}>{AIRPORTS.map(a => <option key={a.code} value={a.code}>{a.city} ({a.code})</option>)}</select></div>
-                    <div><label style={{ display: "block", fontSize: 10, fontWeight: 600, color: "#94A3B8", marginBottom: 4 }}>Date</label><input type="date" value={addForm.date} onChange={e => setAddForm(p => ({ ...p, date: e.target.value }))} style={IS} /></div>
-                    <div><label style={{ display: "block", fontSize: 10, fontWeight: 600, color: "#94A3B8", marginBottom: 4 }}>Departure</label><input type="time" value={addForm.depTime} onChange={e => setAddForm(p => ({ ...p, depTime: e.target.value }))} style={IS} /></div>
-                    <div><label style={{ display: "block", fontSize: 10, fontWeight: 600, color: "#94A3B8", marginBottom: 4 }}>Arrival</label><input type="time" value={addForm.arrTime} onChange={e => setAddForm(p => ({ ...p, arrTime: e.target.value }))} style={IS} /></div>
-                    <div><label style={{ display: "block", fontSize: 10, fontWeight: 600, color: "#94A3B8", marginBottom: 4 }}>Duration</label><input value={addForm.duration} onChange={e => setAddForm(p => ({ ...p, duration: e.target.value }))} placeholder="3h 30m" style={IS} /></div>
-                    <div><label style={{ display: "block", fontSize: 10, fontWeight: 600, color: "#94A3B8", marginBottom: 4 }}>Stops</label><select value={addForm.stops} onChange={e => setAddForm(p => ({ ...p, stops: Number(e.target.value) }))} style={SS}><option value={0}>Nonstop</option><option value={1}>1 Stop</option><option value={2}>2 Stops</option></select></div>
-                    <div><label style={{ display: "block", fontSize: 10, fontWeight: 600, color: "#94A3B8", marginBottom: 4 }}>Cabin</label><select value={addForm.cabin} onChange={e => setAddForm(p => ({ ...p, cabin: e.target.value }))} style={SS}><option>Economy</option><option>Premium Economy</option><option>Business</option></select></div>
-                    <div><label style={{ display: "block", fontSize: 10, fontWeight: 600, color: "#94A3B8", marginBottom: 4 }}>Price ($)</label><input type="number" value={addForm.price} onChange={e => setAddForm(p => ({ ...p, price: Number(e.target.value) }))} style={IS} /></div>
-                    <div><label style={{ display: "block", fontSize: 10, fontWeight: 600, color: "#94A3B8", marginBottom: 4 }}>Tax ($)</label><input type="number" value={addForm.tax || 0} onChange={e => setAddForm(p => ({ ...p, tax: Number(e.target.value) }))} style={IS} /></div>
-                  </div>
-
-                  {addRoundTrip && (
-                    <div style={{ background: "#F0FDFA", borderRadius: 12, padding: 16, marginBottom: 12, border: "1px solid #CCFBF1" }}>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: "#0D9488", marginBottom: 8 }}>Return Flight ({AIRPORTS.find(a => a.code === addForm.to)?.city} &rarr; {AIRPORTS.find(a => a.code === addForm.from)?.city})</div>
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(130px,1fr))", gap: 10 }}>
-                        <div><label style={{ display: "block", fontSize: 10, fontWeight: 600, color: "#94A3B8", marginBottom: 4 }}>Flight Number</label><input value={returnForm.flightNumber} onChange={e => setReturnForm(p => ({ ...p, flightNumber: e.target.value.toUpperCase() }))} placeholder="SK102" style={IS} /></div>
-                        <div><label style={{ display: "block", fontSize: 10, fontWeight: 600, color: "#94A3B8", marginBottom: 4 }}>Return Date</label><input type="date" value={returnForm.date} onChange={e => setReturnForm(p => ({ ...p, date: e.target.value }))} min={addForm.date} style={IS} /></div>
-                        <div><label style={{ display: "block", fontSize: 10, fontWeight: 600, color: "#94A3B8", marginBottom: 4 }}>Departure</label><input type="time" value={returnForm.depTime} onChange={e => setReturnForm(p => ({ ...p, depTime: e.target.value }))} style={IS} /></div>
-                        <div><label style={{ display: "block", fontSize: 10, fontWeight: 600, color: "#94A3B8", marginBottom: 4 }}>Arrival</label><input type="time" value={returnForm.arrTime} onChange={e => setReturnForm(p => ({ ...p, arrTime: e.target.value }))} style={IS} /></div>
-                        <div><label style={{ display: "block", fontSize: 10, fontWeight: 600, color: "#94A3B8", marginBottom: 4 }}>Duration</label><input value={returnForm.duration} onChange={e => setReturnForm(p => ({ ...p, duration: e.target.value }))} placeholder="3h" style={IS} /></div>
-                        <div><label style={{ display: "block", fontSize: 10, fontWeight: 600, color: "#94A3B8", marginBottom: 4 }}>Price ($)</label><input type="number" value={returnForm.price} onChange={e => setReturnForm(p => ({ ...p, price: Number(e.target.value) }))} style={IS} /></div>
-                        <div><label style={{ display: "block", fontSize: 10, fontWeight: 600, color: "#94A3B8", marginBottom: 4 }}>Tax ($)</label><input type="number" value={returnForm.tax || 0} onChange={e => setReturnForm(p => ({ ...p, tax: Number(e.target.value) }))} style={IS} /></div>
-                      </div>
-                    </div>
-                  )}
-
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
-                    <TextareaField label="Baggage Info" value={addForm.baggage} onChange={v => setAddForm(p => ({ ...p, baggage: v }))} placeholder="1 carry-on, 1 checked bag..." />
-                    <TextareaField label="Fare Rules" value={addForm.fareRules} onChange={v => setAddForm(p => ({ ...p, fareRules: v }))} placeholder="Non-refundable..." />
-                  </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 16 }}>
-                    <div><label style={{ display: "block", fontSize: 10, fontWeight: 600, color: "#94A3B8", marginBottom: 4 }}>Meals</label><input value={addForm.meals} onChange={e => setAddForm(p => ({ ...p, meals: e.target.value }))} style={IS} /></div>
-                    <div><label style={{ display: "block", fontSize: 10, fontWeight: 600, color: "#94A3B8", marginBottom: 4 }}>Seat Pitch</label><input value={addForm.seatPitch} onChange={e => setAddForm(p => ({ ...p, seatPitch: e.target.value }))} style={IS} /></div>
-                    <div><label style={{ display: "block", fontSize: 10, fontWeight: 600, color: "#94A3B8", marginBottom: 4 }}>WiFi</label><input value={addForm.wifi} onChange={e => setAddForm(p => ({ ...p, wifi: e.target.value }))} style={IS} /></div>
-                  </div>
-                  <button onClick={addFlight} style={{ padding: "10px 28px", borderRadius: 10, border: "none", background: "linear-gradient(135deg,#0891B2,#0E7490)", color: "#fff", fontFamily: "'Outfit',sans-serif", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
-                    {addRoundTrip ? "Add Both Flights" : "Add Flight"}
-                  </button>
-                </div>
-              )}
-
-              {/* Table */}
-              <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #E2E8F0", overflow: "hidden" }}>
-                <div style={{ overflowX: "auto" }}>
-                  <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: "'Outfit',sans-serif", fontSize: 13 }}>
-                    <thead><tr style={{ background: "#F8FAFC", borderBottom: "1px solid #E2E8F0" }}>
-                      {["Flight #", "Airline", "Route", "Date", "Dep", "Arr", "Stops", "Cabin", "Price", "Tax", ""].map(h => (
-                        <th key={h} style={{ padding: "10px 8px", textAlign: "left", fontSize: 10, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: 0.8, whiteSpace: "nowrap" }}>{h}</th>
-                      ))}
-                    </tr></thead>
-                    <tbody>
-                      {filtered.slice(0, 80).map(f => {
-                        const airline = airlines.find(a => a.code === f.airlineCode) || { code: f.airlineCode, name: f.airlineCode, color: "#64748B", logo: "" };
-                        const isE = editingId === f.id;
-                        return (
-                          <tr key={f.id} style={{ borderBottom: "1px solid #F1F5F9", background: isE ? "#F0FDFA" : "transparent" }}>
-                            <td style={{ padding: "8px", fontWeight: 600, color: "#1E293B", fontSize: 12 }}>{isE ? <input value={editForm.flightNumber || ""} onChange={e => setEditForm(p => ({ ...p, flightNumber: e.target.value.toUpperCase() }))} style={{ ...IS, width: 80, fontSize: 11, padding: "4px 6px" }} /> : (f.flightNumber || f.id)}</td>
-                            <td style={{ padding: "8px" }}>{isE ? <select value={editForm.airlineCode} onChange={e => setEditForm(p => ({ ...p, airlineCode: e.target.value }))} style={{ ...SS, fontSize: 11, padding: "4px 6px" }}>{airlines.map(a => <option key={a.code} value={a.code}>{a.code}</option>)}</select> : <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><AirlineLogo airline={airline} size={22} /><span style={{ color: "#334155", fontWeight: 500, fontSize: 11 }}>{airline.name}</span></span>}</td>
-                            <td style={{ padding: "8px", fontWeight: 600, color: "#1E293B", whiteSpace: "nowrap", fontSize: 12 }}>{isE ? <div style={{ display: "flex", gap: 4, alignItems: "center" }}><select value={editForm.from} onChange={e => setEditForm(p => ({ ...p, from: e.target.value }))} style={{ ...SS, fontSize: 11, padding: "4px" }}>{AIRPORTS.map(a => <option key={a.code} value={a.code}>{a.code}</option>)}</select><span>&rarr;</span><select value={editForm.to} onChange={e => setEditForm(p => ({ ...p, to: e.target.value }))} style={{ ...SS, fontSize: 11, padding: "4px" }}>{AIRPORTS.map(a => <option key={a.code} value={a.code}>{a.code}</option>)}</select></div> : `${f.from} \u2192 ${f.to}`}</td>
-                            <td style={{ padding: "8px", color: "#64748B", whiteSpace: "nowrap", fontSize: 11 }}>{isE ? <input type="date" value={editForm.date} onChange={e => setEditForm(p => ({ ...p, date: e.target.value }))} style={{ ...IS, fontSize: 11, padding: "4px 6px", width: 125 }} /> : f.date}</td>
-                            <td style={{ padding: "8px", fontWeight: 600, color: "#1E293B", fontSize: 12 }}>{isE ? <input type="time" value={editForm.depTime} onChange={e => setEditForm(p => ({ ...p, depTime: e.target.value }))} style={{ ...IS, fontSize: 11, padding: "4px 6px", width: 85 }} /> : f.depTime}</td>
-                            <td style={{ padding: "8px", fontWeight: 600, color: "#1E293B", fontSize: 12 }}>{isE ? <input type="time" value={editForm.arrTime} onChange={e => setEditForm(p => ({ ...p, arrTime: e.target.value }))} style={{ ...IS, fontSize: 11, padding: "4px 6px", width: 85 }} /> : f.arrTime}</td>
-                            <td style={{ padding: "8px", fontSize: 11 }}>{isE ? <select value={editForm.stops} onChange={e => setEditForm(p => ({ ...p, stops: Number(e.target.value) }))} style={{ ...SS, fontSize: 11, padding: "4px" }}><option value={0}>0</option><option value={1}>1</option><option value={2}>2</option></select> : <span style={{ fontWeight: 600, color: f.stops === 0 ? "#0D9488" : f.stops === 1 ? "#D97706" : "#DC2626" }}>{f.stops === 0 ? "Nonstop" : f.stops}</span>}</td>
-                            <td style={{ padding: "8px", color: "#64748B", fontSize: 11 }}>{isE ? <select value={editForm.cabin} onChange={e => setEditForm(p => ({ ...p, cabin: e.target.value }))} style={{ ...SS, fontSize: 11, padding: "4px" }}><option>Economy</option><option>Premium Economy</option><option>Business</option></select> : f.cabin}</td>
-                            <td style={{ padding: "8px", fontWeight: 700, color: "#0F172A" }}>{isE ? <input type="number" value={editForm.price} onChange={e => setEditForm(p => ({ ...p, price: Number(e.target.value) }))} style={{ ...IS, fontSize: 12, padding: "4px 6px", width: 70, fontWeight: 700 }} /> : `$${f.price}`}</td>
-                            <td style={{ padding: "8px", fontWeight: 700, color: "#334155" }}>{isE ? <input type="number" value={editForm.tax || 0} onChange={e => setEditForm(p => ({ ...p, tax: Number(e.target.value) }))} style={{ ...IS, fontSize: 12, padding: "4px 6px", width: 70, fontWeight: 700 }} /> : `$${f.tax || 0}`}</td>
-                            <td style={{ padding: "8px" }}><div style={{ display: "flex", gap: 4 }}>
-                              {isE ? (<><button onClick={saveEdit} style={{ padding: "4px 8px", borderRadius: 6, border: "none", background: "#0891B2", color: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer", fontFamily: "'Outfit',sans-serif" }}>Save</button><button onClick={() => setEditingId(null)} style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid #E2E8F0", background: "#fff", color: "#64748B", fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "'Outfit',sans-serif" }}>X</button></>) : (<><button onClick={() => startEdit(f)} style={{ width: 24, height: 24, borderRadius: 6, border: "1px solid #E2E8F0", background: "#F8FAFC", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#64748B" }}><EditIcon /></button><button onClick={() => deleteFlight(f.id)} style={{ width: 24, height: 24, borderRadius: 6, border: "1px solid #FEE2E2", background: "#FEF2F2", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#DC2626" }}><TrashIcon /></button></>)}
-                            </div></td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-                {filtered.length > 80 && <div style={{ padding: 12, textAlign: "center", color: "#94A3B8", fontSize: 12 }}>Showing 80 of {filtered.length}. Use filters.</div>}
-                {filtered.length === 0 && <div style={{ padding: 40, textAlign: "center", color: "#94A3B8", fontSize: 14 }}>No flights match</div>}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 /* ─────────────────────── FLIGHT DETAIL MODAL ─────────────────────── */
 function FlightDetailModal({ flight, airline, fromAirport, toAirport, onClose, onSelect }) {
@@ -1139,9 +744,6 @@ export default function App() {
   const [page, setPage] = useState("search");
   const [searchParams, setSearchParams] = useState(null);
   const [flightSelection, setFlightSelection] = useState(null);
-  const [showAdmin, setShowAdmin] = useState(false);
-  const [adminAuth, setAdminAuth] = useState(false);
-  const ADMIN_PASSWORD = "admin123";
 
   const navigate = (newPage, data) => {
     if (newPage === "results") { setSearchParams(data); }
@@ -1196,11 +798,6 @@ export default function App() {
     return () => window.removeEventListener("popstate", handler);
   }, []);
 
-  const handleAdminToggle = () => {
-    if (adminAuth) { setShowAdmin(!showAdmin); }
-    else { const p = prompt("Enter admin password:"); if (p === ADMIN_PASSWORD) { setAdminAuth(true); setShowAdmin(true); } else if (p !== null) { alert("Incorrect password"); } }
-  };
-
   if (loading) {
     return <div style={{ padding: 40, fontFamily: "'Outfit', sans-serif" }}>Loading...</div>;
   }
@@ -1217,11 +814,6 @@ export default function App() {
         input[type=number]{-moz-appearance:textfield}::selection{background:#0891B244}
         ::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#CBD5E1;border-radius:3px}
       `}</style>
-
-      <button onClick={handleAdminToggle} title="Admin Panel" style={{ position: "fixed", bottom: 24, right: 24, zIndex: 1000, width: 52, height: 52, borderRadius: 16, border: "none", background: adminAuth ? "#0F172A" : "rgba(15,23,42,0.8)", color: adminAuth ? "#5EEAD4" : "#94A3B8", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 20px rgba(0,0,0,0.2)", transition: "all 0.2s", backdropFilter: "blur(8px)" }}
-        onMouseEnter={e => e.currentTarget.style.transform = "scale(1.08)"} onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}><GearIcon /></button>
-
-      {showAdmin && <AdminPanel onClose={() => setShowAdmin(false)} />}
 
       {page === "search" && <SearchPage onSearch={p => navigate("results", p)} />}
       {page === "results" && searchParams && <ResultsPage searchParams={searchParams} onBack={() => navigate("search")} onSelect={sel => navigate("payment", sel)} />}
